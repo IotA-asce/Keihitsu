@@ -3,9 +3,9 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List
 
-from .core import PROJECT_ROOT, extract_json_from_text, save_json_safe
+from .core import PROJECT_ROOT, save_json_safe
 from .llm import TextLLMClient
-from .schemas import AnchorEvent, AnchorList
+from .schemas import AnchorEvent, AnchorList, AnchorListSchema
 
 logger = logging.getLogger(__name__)
 
@@ -101,15 +101,15 @@ def _generate_anchors_for_chapter(
     max_attempts: int = 2,
 ) -> AnchorList:
     anchors: AnchorList = AnchorList(anchors=[])
+    missing_path = out_path.parent / "anchors_missing.json"
 
     for attempt in range(1, max_attempts + 1):
         prompt = _build_anchor_prompt(chapter_id, chapter_text)
-        raw = client.generate(prompt, temperature=0.3)
-        json_str = extract_json_from_text(raw)
+        raw = client.generate(prompt, temperature=0.3, schema=AnchorListSchema)
 
         try:
-            data = json.loads(json_str)
-            anchors = AnchorList.model_validate(data)
+            data = json.loads(raw)
+            anchors = AnchorListSchema.model_validate(data)
         except Exception as e:  # noqa: BLE001
             logger.error(
                 "[anchors] Attempt %d: JSON parse/validation failed for %s: %s",
@@ -119,18 +119,33 @@ def _generate_anchors_for_chapter(
             )
             continue
 
-        if anchors.anchors or attempt == max_attempts:
+        if anchors.anchors:
             break
-        logger.warning(
-            "[anchors] Attempt %d: Empty anchors for %s; retrying once.",
-            attempt,
-            chapter_id,
-        )
+        if len(chapter_text) > 500 and attempt < max_attempts:
+            logger.warning(
+                "[anchors] Attempt %d: Empty anchors for %s; retrying with safety prompt.",
+                attempt,
+                chapter_id,
+            )
+            prompt += (
+                "\nYou returned no anchor events, which is likely wrong. "
+                "Re-scan for ANY events that significantly change the story or relationships and output at least one anchor."
+            )
+        else:
+            break
 
     for a in anchors.anchors:
         if not a.chapter_id:
             object.__setattr__(a, "chapter_id", chapter_id)
 
+    if not anchors.anchors and len(chapter_text) > 500:
+        logger.warning("[anchors] Missing anchors for %s after retries", chapter_id)
+        existing = []
+        if missing_path.exists():
+            existing = json.load(missing_path.open("r", encoding="utf-8"))
+        existing.append({"chapter_id": chapter_id})
+        save_json_safe(missing_path, existing)
+
     save_json_safe(out_path, anchors.model_dump())
     logger.info("[anchors] Saved anchors for %s → %s", chapter_id, out_path)
-    return anchors
+    return AnchorList.model_validate(anchors.model_dump())
