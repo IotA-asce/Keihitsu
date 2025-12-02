@@ -1,4 +1,5 @@
 import json
+import json
 import logging
 import re
 from pathlib import Path
@@ -123,6 +124,15 @@ def run_branch_suggestions(cfg: Dict[str, Any]) -> None:
             branch_id = f"{anchor_id}_b{idx:02d}"
             br["branch_id"] = branch_id
             br["anchor_id"] = anchor_id
+            if "branch_type" in br:
+                br["branch_type"] = str(br["branch_type"]).replace(" ", "")
+                normalized = br["branch_type"].lower()
+                if normalized.startswith("bad"):
+                    br["branch_type"] = "BadEnd"
+                elif normalized.startswith("wild"):
+                    br["branch_type"] = "Wildcard"
+                else:
+                    br["branch_type"] = "Behavioral"
             try:
                 suggestions.append(BranchSuggestion.model_validate(br))
             except Exception as e:  # noqa: BLE001

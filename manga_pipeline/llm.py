@@ -1,10 +1,12 @@
 import base64
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Type
 
 from xai_sdk import Client
 from xai_sdk.chat import image, system, user
+
+from pydantic import BaseModel, ValidationError
 
 from .core import extract_json_from_text
 
@@ -36,29 +38,74 @@ class TextLLMClient:
         max_new_tokens: int = 2048,
         temperature: float = 0.7,
         force_json: bool = False,
+        schema: Optional[Type[BaseModel]] = None,
     ) -> str:
-        if force_json:
+        if schema is not None:
+            prompt = (
+                f"{prompt}\n\n"
+                "You MUST respond with ONLY a single valid JSON object. Use exactly the "
+                "fields from this schema and no others: "
+                f"{list(schema.model_fields.keys())}. Do not include commentary or code fences."
+            )
+        elif force_json:
             prompt = (
                 f"{prompt}\n\n"
                 "You MUST respond with ONLY a single valid JSON object. "
                 "Do not include explanation, commentary, or markdown fences."
             )
 
-        chat = self.client.chat.create(model=self.model_id)
-        chat.append(system(self.system_prompt))
-        chat.append(user(prompt))
+        attempts = 3 if schema is not None else 1
+        last_error: Optional[str] = None
+        response_text = ""
 
-        logger.debug(
-            "TextLLMClient.generate: sending prompt (len=%d chars)", len(prompt)
-        )
+        for attempt in range(1, attempts + 1):
+            chat = self.client.chat.create(model=self.model_id)
+            chat.append(system(self.system_prompt))
+            chat.append(user(prompt))
 
-        resp = chat.sample(temperature=temperature)
-        content = (resp.content or "").strip()
-        logger.debug(
-            "TextLLMClient.generate: received response (len=%d chars)",
-            len(content),
-        )
-        return content
+            logger.debug(
+                "TextLLMClient.generate: sending prompt (len=%d chars, attempt %d)",
+                len(prompt),
+                attempt,
+            )
+
+            resp = chat.sample(temperature=temperature)
+            response_text = (resp.content or "").strip()
+            logger.debug(
+                "TextLLMClient.generate: received response (len=%d chars)",
+                len(response_text),
+            )
+
+            if schema is None:
+                return response_text
+
+            json_payload = extract_json_from_text(response_text)
+            try:
+                schema.model_validate_json(json_payload)
+                return json_payload
+            except ValidationError as exc:
+                last_error = str(exc)
+                logger.warning(
+                    "TextLLMClient.generate: validation failed attempt %d/%d: %s",
+                    attempt,
+                    attempts,
+                    exc,
+                )
+                corrected_prompt = (
+                    "The previous JSON was invalid for the expected schema. "
+                    "Please return corrected JSON only, no commentary.\n\n"
+                    f"Invalid JSON was:\n{json_payload}\n\n"
+                    f"Validation errors:\n{exc}"
+                )
+                prompt = corrected_prompt
+
+        logger.error("TextLLMClient.generate: failed to validate JSON after retries: %s", last_error)
+        if schema is not None:
+            try:
+                return schema().model_dump_json()
+            except Exception:  # noqa: BLE001
+                return "{}"
+        return response_text
 
 
 class VLMClient:

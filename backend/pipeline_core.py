@@ -21,6 +21,7 @@ from manga_pipeline.ingest import run_chapter_segmentation, run_vlm_extraction
 from manga_pipeline.novelization import run_novelization
 from manga_pipeline.refine_summaries import run_refinement
 from manga_pipeline.scales import run_scales
+from manga_pipeline.story_index import run_story_index
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,7 @@ def main() -> None:
             "vlm",
             "novel",
             "refine",
+            "story_index",
             "anchors",
             "branches",
             "branch_generate",
@@ -110,6 +112,8 @@ def main() -> None:
         run_vlm_extraction(cfg)
     elif args.step == "refine":
         run_refinement(cfg)
+    elif args.step == "story_index":
+        run_story_index(cfg)
     elif args.step == "novel":
         run_novelization(cfg)
     elif args.step == "anchors":

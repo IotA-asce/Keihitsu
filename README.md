@@ -10,6 +10,9 @@ can be triggered from a UI.
 - **Python core (backend/pipeline_core.py + manga_pipeline/)** — segmentation,
   VLM summaries, refinement, novelization, anchors, branching, character bible,
   scales, and story continuation.
+- **Story Index + Refinement** — summaries are aggregated into a global
+  `data/story_index/story_index.json` map of arcs, intents, and chapter order,
+  which is used to run a second-pass refinement on each chapter summary.
 - **FastAPI API (backend/api.py)** — one endpoint per step with optional
   fire-and-forget execution (`async_run=true`).
 - **React dashboard (frontend/)** — Vite + Material UI cards for each step,

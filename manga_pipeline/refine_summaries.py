@@ -5,7 +5,8 @@ from typing import Any, Dict, List
 
 from .core import PROJECT_ROOT, extract_json_from_text, save_json_safe
 from .llm import TextLLMClient
-from .schemas import ChapterSummary
+from .schemas import ChapterSummary, StoryIndexSchema
+from .story_index import run_story_index
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +23,11 @@ def _load_all_summaries(summaries_dir: Path) -> List[ChapterSummary]:
     return out
 
 
-def _build_global_context(summaries: List[ChapterSummary]) -> str:
-    buf = []
+def _build_global_context(
+    summaries: List[ChapterSummary], story_index: StoryIndexSchema
+) -> str:
+    buf = ["GLOBAL ARCS: " + "; ".join(story_index.global_arcs)]
+    buf.append("THEMES: " + "; ".join(story_index.recurring_themes))
     for s in summaries:
         ev = "; ".join(s.events)
         dia = "; ".join(s.dialogues)
@@ -70,7 +74,8 @@ def run_refinement(cfg: Dict[str, Any]) -> None:
     if not summaries:
         raise RuntimeError("No chapter summaries found for refinement.")
 
-    global_ctx = _build_global_context(summaries)
+    story_index = run_story_index(cfg)
+    global_ctx = _build_global_context(summaries, story_index)
     text_client = TextLLMClient(
         model_id=models_cfg["text_model_id"],
         api_key=models_cfg.get("api_key"),
@@ -84,11 +89,12 @@ def run_refinement(cfg: Dict[str, Any]) -> None:
 
         prompt = _build_refine_prompt(chapter, global_ctx)
         logger.info("[refine] Refining %s...", chapter.chapter_id)
-        raw = text_client.generate(prompt, temperature=0.4, force_json=True)
-        json_str = extract_json_from_text(raw)
+        raw = text_client.generate(
+            prompt, temperature=0.4, schema=ChapterSummary
+        )
 
         try:
-            refined_data = json.loads(json_str)
+            refined_data = json.loads(raw)
             refined = ChapterSummary.model_validate(refined_data).model_dump()
         except Exception as e:  # noqa: BLE001
             logger.error(
