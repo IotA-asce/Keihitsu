@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic
+requests
+pyyaml
+opencv-python
+numpy
+regex
+tqdm
+xai-sdk

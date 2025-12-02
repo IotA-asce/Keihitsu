@@ -1,0 +1,12 @@
+{
+  "name": "manga-pipeline-dev",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd frontend && npm install && npm run dev",
+    "dev:backend": "cd backend && pip install -r requirements.txt && uvicorn api:app --reload --port 8000"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
