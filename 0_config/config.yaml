@@ -1,0 +1,24 @@
+paths:
+  pages_dir: "1_pages"
+  chapters_dir: "2_chapters"
+  chapter_summaries_dir: "3_summaries"
+  novel_dir: "4_novel"
+  timeline_dir: "5_timeline"
+  characters_dir: "6_characters"
+  scales_dir: "7_scales"
+
+models:
+  api_key: "YOUR_XAI_API_KEY_HERE"
+  text_model_id: "grok-4-1-fast"
+  vlm_model_id: "grok-vision-beta"
+
+scales:
+  erotism_min: 0
+  erotism_max: 5
+  romance_min: 0
+  romance_max: 5
+  action_min: 0
+  action_max: 5
+
+continuation:
+  target_pages: 18
